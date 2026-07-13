@@ -1,4 +1,5 @@
 export const HOSTING_CONFIG_KEY = "planorama_hosting_config";
+export const PROJECTS_KEY = "planorama_projects";
 export const HOSTING_DOMAIN_SUFFIX = ".puter.site";
 
 export const isHostedUrl = (url: string): boolean =>
