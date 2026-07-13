@@ -33,7 +33,7 @@ export default function Home() {
       return false;
     }
     
-    setProjects((prev) => [newItem, ...prev]);
+    setProjects((prev) => [{ ...saved, id: newID, name }, ...prev]);
 
     navigate(`/visualizer/${newID}`, {
       state: {
