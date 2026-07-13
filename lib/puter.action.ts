@@ -14,7 +14,7 @@ export const getCurrentUser = async () => {
   }
 }
 
-export const createProject = async ({ item }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
+export const createProject = async ({ item, visibility }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
   const projectId = item.id;
 
   const hosting = await getOrCreateHostingConfig();
