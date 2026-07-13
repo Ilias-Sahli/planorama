@@ -4,8 +4,8 @@ import { ArrowRight, ArrowUpRight, Clock, Layers} from "lucide-react";
 import Button from "../../components/ui/Button";
 import Upload from "../../components/Upload";
 import { useNavigate } from "react-router";
-import { useState } from "react";
-import { createProject } from "../../lib/puter.action";
+import { useState, useEffect } from "react";
+import { createProject, loadProjects } from "../../lib/puter.action";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -17,6 +17,10 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<DesignItem[]>([]);
+
+  useEffect(() => {
+    loadProjects().then(setProjects);
+  }, []);
 
   const handleUploadComplete = async (base64Image: string) => {
     const newID = Date.now().toString();
@@ -38,7 +42,7 @@ export default function Home() {
     navigate(`/visualizer/${newID}`, {
       state: {
         initialImage: saved.sourceImage,
-        intialRendered: saved.renderedImage || null,
+        initialRender: saved.renderedImage || null,
         name
       }
     });
@@ -114,7 +118,7 @@ export default function Home() {
                       <h3>{name}</h3>
                       <div className="meta">
                         <Clock size={12} />
-                        <span>{new Date(timestamp).toLocaleDateString()}
+                        <span>{new Date(timestamp).toLocaleDateString('en-US', { timeZone: 'UTC' })}
                         </span>
                         <span>
                           By Ilias

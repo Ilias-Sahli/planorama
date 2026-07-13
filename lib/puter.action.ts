@@ -1,6 +1,6 @@
 import puter from "@heyputer/puter.js";
 import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting";
-import { isHostedUrl } from "./utils";
+import { isHostedUrl, PROJECTS_KEY } from "./utils";
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -14,7 +14,38 @@ export const getCurrentUser = async () => {
   }
 }
 
+export const loadProjects = async (): Promise<DesignItem[]> => {
+  try {
+    const projects = await puter.kv.get(PROJECTS_KEY) as DesignItem[] | null;
+    return projects || [];
+  } catch (e) {
+    console.warn('Failed to load projects', e);
+    return [];
+  }
+}
+
+export const getProjectById = async (id: string): Promise<DesignItem | null> => {
+  try {
+    const projects = await loadProjects();
+    return projects.find(p => p.id === id) || null;
+  } catch (e) {
+    console.warn('Failed to get project', e);
+    return null;
+  }
+}
+
+const saveProjects = async (projects: DesignItem[]): Promise<boolean> => {
+  try {
+    await puter.kv.set(PROJECTS_KEY, projects);
+    return true;
+  } catch (e) {
+    console.warn('Failed to save projects', e);
+    return false;
+  }
+}
+
 export const createProject = async ({ item, visibility }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
+  let renderHostingFailed = false;
   const projectId = item.id;
 
   const hosting = await getOrCreateHostingConfig();
@@ -36,8 +67,18 @@ export const createProject = async ({ item, visibility }: CreateProjectParams): 
     return null;
   }
 
-  const resolvedRender = hostedRender?.url ? hostedRender?.url
-  : item.renderedImage && isHostedUrl(item.renderedImage) ? item.renderedImage : undefined;
+  let resolvedRender: string | undefined;
+  if (hostedRender?.url) {
+    resolvedRender = hostedRender.url;
+  } else if (item.renderedImage && isHostedUrl(item.renderedImage)) {
+    resolvedRender = item.renderedImage;
+  } else if (item.renderedImage) {
+    // Configured render exists but could not be hosted and is not already hosted
+    renderHostingFailed = true;
+    resolvedRender = undefined;
+  } else {
+    resolvedRender = undefined;
+  }
 
   const {
     sourcePath: _sourcePath,
@@ -54,6 +95,24 @@ export const createProject = async ({ item, visibility }: CreateProjectParams): 
   }
 
   try{
+    if (renderHostingFailed) {
+      console.warn('Rendered image could not be hosted and will be lost');
+    }
+
+    // Persist to kv store
+    const projects = await loadProjects();
+    const existingIndex = projects.findIndex(p => p.id === projectId);
+
+    if (existingIndex >= 0) {
+      projects[existingIndex] = payload;
+    } else {
+      projects.unshift(payload);
+    }
+
+    const saved = await saveProjects(projects);
+    if (!saved) {
+      console.warn('Failed to persist project to storage');
+    }
 
     return payload;
   } catch(e) {
