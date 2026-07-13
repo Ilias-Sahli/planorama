@@ -30,7 +30,7 @@ export const fetchAsDataUrl = async (url: string): Promise<string> => {
 }
 
 export const generate3DView = async ({ sourceImage }: Generate3DViewParams): Promise<{ renderedImage: string | null; renderedPath?: string }> => {
-  const dataUrl = sourceImage.startsWith('data: ')
+  const dataUrl = sourceImage.startsWith('data:')
     ? sourceImage
     : await fetchAsDataUrl(sourceImage);
 
@@ -43,7 +43,7 @@ export const generate3DView = async ({ sourceImage }: Generate3DViewParams): Pro
 
   const response = await puter.ai.txt2img(ROOMIFY_RENDER_PROMPT, {
     provider: 'gemini',
-    model: 'gemini-3.1-flash-image',
+    model: 'google/gemini-2.5-flash-image',
     input_image: base64Data,
     input_image_mime_type: mimeType,
     ratio: { w: 1024, h: 1024 },
