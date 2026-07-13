@@ -50,6 +50,7 @@ export const createProject = async ({ item, visibility }: CreateProjectParams): 
     ...rest,
     sourceImage: resolvedSource,
     renderedImage: resolvedRender,
+    isPublic: visibility === 'public',
   }
 
   try{
