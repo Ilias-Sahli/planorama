@@ -4,7 +4,7 @@ import { ArrowRight, ArrowUpRight, Clock, Layers} from "lucide-react";
 import Button from "../../components/ui/Button";
 import Upload from "../../components/Upload";
 import { useNavigate } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createProject, loadProjects } from "../../lib/puter.action";
 
 export function meta({}: Route.MetaArgs) {
@@ -17,35 +17,45 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<DesignItem[]>([]);
+  const isCreatingProjectRef = useRef(false);
 
   useEffect(() => {
     loadProjects().then(setProjects);
   }, []);
 
   const handleUploadComplete = async (base64Image: string) => {
-    const newID = Date.now().toString();
-    const name = `Residence ${newID}`;
+    try{
+        if(isCreatingProjectRef.current) return false;
+        isCreatingProjectRef.current = true;
+        const newID = Date.now().toString();
+        const name = `Residence ${newID}`;
 
-    const newItem = {
-      id: newID, name, sourceImage: base64Image, renderedImage: undefined, timestamp: Date.now()
+        const newItem = {
+          id: newID, name, sourceImage: base64Image, renderedImage: undefined, timestamp: Date.now()
+        }
+
+        const saved = await createProject({ item: newItem, visibility: 'private' });
+
+        if(!saved){
+          console.error("Failed to create project");
+          return false;
+        }
+        
+        setProjects((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
+
+        navigate(`/visualizer/${saved.id}`, {
+          state: {
+            initialImage: saved.sourceImage,
+            initialRender: saved.renderedImage || null,
+            name
+          }
+        });
+
+        return true;
+    } finally {
+      isCreatingProjectRef.current = false;
     }
-
-    const saved = await createProject({ item: newItem, visibility: 'private' });
-
-    if(!saved){
-      console.error("Failed to create project");
-      return false;
-    }
-    
-    setProjects((prev) => [{ ...saved, id: newID, name }, ...prev]);
-
-    navigate(`/visualizer/${newID}`, {
-      state: {
-        initialImage: saved.sourceImage,
-        initialRender: saved.renderedImage || null,
-        name
-      }
-    });
+   
   }
 
   return (
@@ -77,7 +87,7 @@ export default function Home() {
             </Button>
           </div>
 
-          <div id="upload" className="upload-shell">
+          <div id="upload" className="upload-shell scroll-mt-24">
             <div className="grid-overlay" />
             
             <div className="upload-card">
@@ -106,7 +116,7 @@ export default function Home() {
             </div>
             <div className="projects-grid">
               {projects.map(({id, name, renderedImage, sourceImage, timestamp}) => (
-                  <div key={id} className="project-card group">
+                  <div key={id} className="project-card group" onClick={() => navigate(`/visualizer/${id}`)}>
                   <div className="preview">
                     <img src={renderedImage || sourceImage} alt="Project"></img>
                     <div className="badge">
