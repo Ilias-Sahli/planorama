@@ -9,7 +9,7 @@ import {
 } from "../lib/constants";
 
 interface UploadProps {
-  onComplete?: (base64: string) => void;
+  onComplete?: (base64: string) => Promise<boolean | void> | boolean | void;
 }
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -62,7 +62,10 @@ const Upload = ({ onComplete }: UploadProps) => {
   }, []);
 
   const processFile = (selectedFile: File) => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      setError("Please sign in with Puter first, then upload.");
+      return;
+    }
 
     clearTimers();
     setError(null);
@@ -105,9 +108,23 @@ const Upload = ({ onComplete }: UploadProps) => {
         if (currentProgress >= 100) {
           clearTimers();
 
-          timersRef.current.timeoutId = window.setTimeout(() => {
+          timersRef.current.timeoutId = window.setTimeout(async () => {
             if (!isMountedRef.current) return;
-            onComplete?.(base64);
+            try {
+              const result = await onComplete?.(base64);
+              // Allow retry when the parent reports failure (returns false).
+              if (result === false && isMountedRef.current) {
+                setFile(null);
+                setProgress(0);
+                setError("Upload failed to save. Please try again.");
+              }
+            } catch {
+              if (isMountedRef.current) {
+                setFile(null);
+                setProgress(0);
+                setError("Upload failed to save. Please try again.");
+              }
+            }
           }, REDIRECT_DELAY_MS);
         }
       }, PROGRESS_INTERVAL_MS);
@@ -117,9 +134,14 @@ const Upload = ({ onComplete }: UploadProps) => {
   };
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      setError("Please sign in with Puter first, then upload.");
+      return;
+    }
 
     const selectedFile = event.target.files?.[0];
+    // Reset the input so picking the same file again still fires onChange.
+    event.target.value = "";
     if (selectedFile) {
       processFile(selectedFile);
     }
@@ -167,7 +189,7 @@ const Upload = ({ onComplete }: UploadProps) => {
           <input
             type="file"
             className="drop-input"
-            accept=".jpg,.jpeg,.png"
+            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
             disabled={!isSignedIn}
             onChange={handleChange}
           />

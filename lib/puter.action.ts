@@ -1,6 +1,7 @@
 import puter from "@heyputer/puter.js";
 import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting";
-import { isHostedUrl, PROJECTS_KEY } from "./utils";
+import { PROJECTS_KEY, isHostedUrl } from "./utils";
+import { PUTER_WORKER_URL } from "./constants";
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -44,38 +45,35 @@ const saveProjects = async (projects: DesignItem[]): Promise<boolean> => {
   }
 }
 
-export const createProject = async ({ item, visibility }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
-  let renderHostingFailed = false;
-  const projectId = item.id;
+export const createProject = async ({ item, visibility = "private"}: CreateProjectParams): Promise<DesignItem | null | undefined> => {
+   let renderHostingFailed = false;
+   const projectId = item.id;
 
-  const hosting = await getOrCreateHostingConfig();
+   const hosting = await getOrCreateHostingConfig().catch(() => null);
 
-  const hostedSource = projectId ? 
-      await uploadImageToHosting({
-          hosting, url: item.sourceImage, projectId, label: 'source',
-  }) : null;
+   const hostedSource = projectId ?
+       await uploadImageToHosting({
+           hosting, url: item.sourceImage, projectId, label: 'source',
+   }).catch(() => null) : null;
 
-  const hostedRender = projectId && item.renderedImage ? await uploadImageToHosting({
-    hosting, url: item.renderedImage, projectId, label: 'rendered',
-  }) : null;
+   const hostedRender = projectId && item.renderedImage ? await uploadImageToHosting({
+     hosting, url: item.renderedImage, projectId, label: 'rendered',
+   }).catch(() => null) : null;
 
-  const resolvedSource = hostedSource?.url || (isHostedUrl(item.sourceImage) ? item.sourceImage: ''
-  );
+  const resolvedSource = hostedSource?.url || item.sourceImage || '';
 
   if(!resolvedSource) {
-    console.warn('Failed to host source image, skipping save.')
+    console.warn('Failed to resolve source image, skipping save.')
     return null;
   }
 
   let resolvedRender: string | undefined;
   if (hostedRender?.url) {
     resolvedRender = hostedRender.url;
-  } else if (item.renderedImage && isHostedUrl(item.renderedImage)) {
-    resolvedRender = item.renderedImage;
   } else if (item.renderedImage) {
-    // Configured render exists but could not be hosted and is not already hosted
-    renderHostingFailed = true;
-    resolvedRender = undefined;
+    // Keep the original render as fallback so upload/visualizer never loses it.
+    if (!isHostedUrl(item.renderedImage)) renderHostingFailed = true;
+    resolvedRender = item.renderedImage;
   } else {
     resolvedRender = undefined;
   }
@@ -94,29 +92,107 @@ export const createProject = async ({ item, visibility }: CreateProjectParams): 
     isPublic: visibility === 'public',
   }
 
-  try{
-    if (renderHostingFailed) {
-      console.warn('Rendered image could not be hosted and will be lost');
+  // Prefer worker persistence, fall back to local KV so upload never dead-ends.
+  if(PUTER_WORKER_URL) {
+    try{
+          const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project: payload, visibility
+            }),
+          });
+
+       if(!response.ok) {
+          console.error('Failed to save the project', await response.text());
+       } else {
+          const data = (await response.json()) as { project?: DesignItem | null }
+
+          if(data?.project) return data.project;
+       }
+    } catch(e) {
+      console.log(`Worker save failed, falling back to KV`, e)
     }
+  }
 
-    // Persist to kv store
-    const projects = await loadProjects();
-    const existingIndex = projects.findIndex(p => p.id === projectId);
-
-    if (existingIndex >= 0) {
-      projects[existingIndex] = payload;
-    } else {
-      projects.unshift(payload);
-    }
-
-    const saved = await saveProjects(projects);
-    if (!saved) {
-      console.warn('Failed to persist project to storage');
-    }
-
-    return payload;
+  try {
+    const existing = await loadProjects();
+    const next = [payload as DesignItem, ...existing.filter(p => p.id !== payload.id)];
+    const ok = await saveProjects(next);
+    if(ok) return payload as DesignItem;
+    return null;
   } catch(e) {
     console.log(`Failed to save project`, e)
     return null;
   }
 }
+
+export const getProjects = async (): Promise<DesignItem[]> => {
+  if(!PUTER_WORKER_URL) {
+    return loadProjects();
+  }
+
+  try{
+    const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/list`, { method: 'GET' });
+
+    if(!response.ok) {
+      console.error('Failed to fetch projects', await response.text());
+      return loadProjects();
+    }
+
+    const data = (await response.json()) as { projects?: DesignItem[] | null };
+    return Array.isArray(data?.projects) ? data.projects : await loadProjects();
+  }catch(e){
+    console.error('Failed to get projects', e);
+    return loadProjects();
+  }
+}
+
+export const getProject = async () => {
+  if(!PUTER_WORKER_URL){
+    console.warn('Missing VITE_PUTER_WORKER_URL; skip history fetch;');
+    return [];
+  }
+
+  try{
+    const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/list`, { method : 'GET' });
+
+    if(!response.ok){
+      console.error('Failed to fetch history', await response.text());
+      return [];
+    }
+
+    const data = (await response.json()) as { projects?: DesignItem[] | null };
+
+    return Array.isArray(data?.projects) ? data.projects: [];
+  } catch (e){
+    console.error('Failed to get projects', e);
+    return [];
+  }
+}
+
+export const getProjectsById = async ({ id }: { id: string }) => {
+    if (PUTER_WORKER_URL) {
+      try {
+          const response = await puter.workers.exec(
+              `${PUTER_WORKER_URL}/api/projects/get?id=${encodeURIComponent(id)}`,
+              { method: "GET" },
+          );
+
+          if (response.ok) {
+              const data = (await response.json()) as {
+                  project?: DesignItem | null;
+              };
+
+              if(data?.project) return data.project;
+          } else {
+              console.error("Failed to fetch project:", await response.text());
+          }
+      } catch (error) {
+          console.error("Worker fetch failed, falling back to KV:", error);
+      }
+    }
+
+    // KV fallback (covers local saves when worker is down/misconfigured)
+    return getProjectById(id);
+};
