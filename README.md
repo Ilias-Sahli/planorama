@@ -1,87 +1,48 @@
-# Welcome to React Router!
+# Planorama
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Petit projet perso pour visualiser des plans 2D en rendus 3D. On upload un plan (JPG/PNG), l'app génère une vue 3D avec Puter AI, et ensuite on peut exporter l'image ou partager le lien.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+Short personal project to turn 2D floor plans into 3D renders. Upload a plan (JPG/PNG), the app generates a 3D view with Puter AI, then you can export the image or share the link.
 
-## Features
+## Comment ça marche / How it works
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- `/` : upload du plan, création du projet, redirection vers `/visualizer/:id`
+- `/visualizer/:id` : affichage du rendu, export (download), partage (Web Share API + liens X/Facebook/WhatsApp/LinkedIn/Telegram/Pinterest/email)
+- Stockage via Puter KV + hosting Puter pour les images. Si le worker est down, ça retombe sur le KV local pour ne pas bloquer l'upload.
 
-## Getting Started
+- `/` : plan upload, project creation, redirect to `/visualizer/:id`
+- `/visualizer/:id` : render view, export (download), share (Web Share API + X/Facebook/WhatsApp/LinkedIn/Telegram/Pinterest/email links)
+- Storage with Puter KV + Puter hosting for images. If the worker is down, it falls back to local KV so upload still works.
 
-### Installation
+## Stack
 
-Install the dependencies:
+React Router 8, React 19, Vite, Tailwind 4, TypeScript, Puter.js, lucide-react, react-compare-slider.
+
+## Lancer en local / Run locally
 
 ```bash
 npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+Ouvrir / Open `http://localhost:5173`
 
-## Building for Production
-
-Create a production build:
+Il faut un fichier `.env.local` avec :
 
 ```bash
-npm run build
+VITE_PUTER_WORKER_URL=https://votre-worker.puter.work
 ```
 
-## Deployment
+Le code du worker est dans `lib/puter.worker.js`, à déployer côté Puter. Sans ça, la sauvegarde passe juste en KV local.
 
-### Docker Deployment
+The worker code lives in `lib/puter.worker.js`, deploy it on Puter side. Without it, save just uses local KV.
 
-To build and run using Docker:
+## Scripts
 
 ```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+npm run dev    # dev
+npm run build  # build prod
+npm run start  # serve le build / serve the build
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
